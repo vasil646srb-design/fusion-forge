@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stellar Forge TG</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
+    <style>
+        body { background: #010208; color: #fff; font-family: 'Inter', sans-serif; margin: 0; user-select: none; overflow: hidden; }
+        .font-ui { font-family: 'Orbitron', sans-serif; }
+        .glass { background: rgba(7, 10, 20, 0.95); border: 1px solid rgba(56, 189, 248, 0.15); }
+        .reactor-shell { width: 200px; height: 200px; border-radius: 50%; border: 6px double #1e293b; position: relative; background: radial-gradient(circle at center, #0a0f1e 0%, #000 100%); }
+        .plasma-core { position: absolute; inset: 0; border-radius: 50%; transition: all 0.2s ease-out; filter: blur(25px); mix-blend-mode: screen; }
+        input[type=range] { -webkit-appearance: none; background: #111827; border-radius: 20px; height: 10px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: #38bdf8; border: 2px solid #fff; }
+        .tier-badge { font-size: 8px; padding: 2px 6px; border-radius: 4px; background: #38bdf8; color: #000; font-weight: 900; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Константы игры
+        const ELEMENTS = {
+            H: { n: 'Водород', color: '#38bdf8', p: 0 },
+            He: { n: 'Гелий', color: '#fbbf24', p: 0 },
+            Li: { n: 'Литий', color: '#a78bfa', p: 500 },
+            C: { n: 'Углерод', color: '#94a3b8', p: 2500 },
+            Fe: { n: 'Железо', color: '#fb7185', p: 15000 },
+            Au: { n: 'Золото', color: '#fcd34d', p: 100000, nft: true },
+            Pt: { n: 'Платина', color: '#e5e7eb', p: 100000, nft: true },
+            Os: { n: 'Осмий', color: '#60a5fa', p: 100000, nft: true }
+        };
+
+        const RECIPES = [
+            { out: 'He', in: { H: 4 }, t: 150, p: 500 },
+            { out: 'Li', in: { He: 2 }, t: 400, p: 5000 },
+            { out: 'C', in: { He: 3 }, t: 800, p: 50000 },
+            { out: 'Fe', in: { C: 4 }, t: 1500, p: 500000 },
+            { out: 'Au', in: { Fe: 10 }, t: 5000, p: 10000000 },
+            { out: 'Pt', in: { Au: 1, Fe: 5 }, t: 15000, p: 50000000 },
+            { out: 'Os', in: { Pt: 1, Au: 1 }, t: 50000, p: 500000000 }
+        ];
+
+        function App() {
+            const [storage, setStorage] = useState({ H: 100000000000, He: 0, Li: 0, C: 0, Fe: 0, Au: 0, Pt: 0, Os: 0 });
+            const [money, setMoney] = useState(0);
+            const [pSlider, setPSlider] = useState(0);
+            const [tSlider, setTSlider] = useState(20);
+            const [upgrades, setUpgrades] = useState({ laserTier: 1, magnetTier: 1 });
+            const [activeRecipe, setActiveRecipe] = useState(null);
+
+            // 1. ЗАГРУЗКА СОХРАНЕНИЯ
+            useEffect(() => {
+                const saved = localStorage.getItem('fusion_save_v1');
+                if (saved) {
+                    const d = JSON.parse(saved);
+                    setStorage(d.storage);
+                    setMoney(d.money);
+                    setUpgrades(d.upgrades);
+                }
+            }, []);
+
+            // 2. АВТОСОХРАНЕНИЕ
+            useEffect(() => {
+                const data = { storage, money, upgrades };
+                localStorage.setItem('fusion_save_v1', JSON.stringify(data));
+            }, [storage, money, upgrades]);
+
+            const currentMaxP = 5000 * Math.pow(100, upgrades.magnetTier - 1);
+            const currentMaxT = 1000 * Math.pow(10, upgrades.laserTier - 1);
+            const curP = Math.floor((pSlider / 100) * currentMaxP);
+
+            useEffect(() => {
+                const timer = setInterval(() => {
+                    setStorage(prev => {
+                        const next = { ...prev };
+                        let found = null;
+                        for (let i = RECIPES.length - 1; i >= 0; i--) {
+                            const r = RECIPES[i];
+                            if (tSlider >= r.t && curP >= r.p) {
+                                const batch = 50000; 
+                                let canCraft = true;
+                                Object.entries(r.in).forEach(([el, amt]) => {
+                                    if (next[el] < amt * batch) canCraft = false;
+                                });
+                                if (canCraft) {
+                                    Object.entries(r.in).forEach(([el, amt]) => next[el] -= amt * batch);
+                                    next[r.out] += batch;
+                                    found = r.out;
+                                    break; 
+                                }
+                            }
+                        }
+                        setActiveRecipe(found);
+                        return found ? next : prev;
+                    });
+                }, 150);
+                return () => clearInterval(timer);
+            }, [tSlider, curP]);
+
+            const sell = (el) => {
+                if (storage[el] <= 0) return;
+                setMoney(m => m + (storage[el] * ELEMENTS[el].p));
+                setStorage(s => ({ ...s, [el]: 0 }));
+            };
+
+            const formatNum = (n) => n >= 1e9 ? (n/1e9).toFixed(1)+'B' : n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(0)+'K' : n;
+
+            return (
+                <div className="p-4 h-screen flex flex-col overflow-y-auto pb-40">
+                    <div className="glass p-4 rounded-2xl flex justify-between items-center mb-4 border-b-2 border-cyan-500">
+                        <div className="font-ui text-xl font-black">{formatNum(money)} $</div>
+                        <div className="text-[10px] text-cyan-400 font-ui uppercase">STABLE</div>
+                    </div>
+
+                    <div className="flex justify-center mb-6">
+                        <div className="reactor-shell flex items-center justify-center">
+                            <div className="plasma-core" style={{
+                                background: activeRecipe ? ELEMENTS[activeRecipe].color : '#38bdf8',
+                                opacity: activeRecipe ? 0.7 : 0.1,
+                                transform: `scale(${0.2 + (pSlider / 100) * 0.8})`
+                            }} />
+                            <div className="z-10 text-center font-ui">
+                                <div className="text-xl font-black">{formatNum(curP)}</div>
+                                <div className="text-[8px] opacity-40 uppercase">ATM</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="glass p-4 rounded-3xl space-y-6 mb-4">
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-[10px] font-ui uppercase">
+                                <span>P-Compression</span>
+                                <span>Tier {upgrades.magnetTier}</span>
+                            </div>
+                            <input type="range" className="w-full" value={pSlider} onChange={e => setPSlider(Number
