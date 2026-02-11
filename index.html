@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Stellar Forge: Cloud Save</title>
+    <title>Stellar Forge: Leaders</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
     <style>
-        body { background: #010208; color: #fff; font-family: 'Inter', sans-serif; margin: 0; user-select: none; touch-action: manipulation; }
+        body { background: #010208; color: #fff; font-family: 'Inter', sans-serif; margin: 0; user-select: none; }
         .font-ui { font-family: 'Orbitron', sans-serif; }
         .glass { background: rgba(7, 10, 20, 0.95); border: 1px solid rgba(56, 189, 248, 0.15); }
-        .reactor-shell { width: 220px; height: 220px; border-radius: 50%; border: 6px double #1e293b; position: relative; background: radial-gradient(circle at center, #0a0f1e 0%, #000 100%); }
-        .plasma-core { position: absolute; inset: 0; border-radius: 50%; transition: all 0.2s ease-out; filter: blur(25px); mix-blend-mode: screen; }
-        input[type=range] { -webkit-appearance: none; background: #111827; border-radius: 20px; height: 12px; width: 100%; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 28px; width: 28px; border-radius: 50%; background: #38bdf8; border: 3px solid #fff; }
-        .tier-badge { font-size: 8px; padding: 2px 6px; border-radius: 4px; background: #38bdf8; color: #000; font-weight: 900; }
+        .reactor-shell { width: 180px; height: 180px; border-radius: 50%; border: 4px double #1e293b; position: relative; background: radial-gradient(circle at center, #0a0f1e 0%, #000 100%); }
+        .plasma-core { position: absolute; inset: 0; border-radius: 50%; transition: all 0.2s; filter: blur(20px); mix-blend-mode: screen; }
+        input[type=range] { -webkit-appearance: none; background: #111827; border-radius: 20px; height: 10px; width: 100%; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: #38bdf8; border: 2px solid #fff; }
+        .tab-active { border-bottom: 2px solid #38bdf8; color: #38bdf8; }
     </style>
 </head>
 <body>
@@ -26,7 +26,6 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- КОНСТАНТЫ ИГРЫ ---
         const ELEMENTS = {
             H:  { n: 'Водород', color: '#38bdf8', p: 0 },
             He: { n: 'Гелий', color: '#fbbf24', p: 0 },
@@ -49,36 +48,39 @@
         ];
 
         function App() {
-            // --- ЛОГИКА СОХРАНЕНИЯ ---
-            const getInitialValue = (key, defaultValue) => {
-                const saved = localStorage.getItem(key);
-                if (!saved) return defaultValue;
-                try { return JSON.parse(saved); } catch { return defaultValue; }
+            const getSaved = (key, def) => {
+                const s = localStorage.getItem(key);
+                return s ? JSON.parse(s) : def;
             };
 
-            const [storage, setStorage] = useState(() => getInitialValue('sf_storage', { H: 100000000000, He: 0, Li: 0, C: 0, Fe: 0, Au: 0, Pt: 0, Os: 0 }));
+            const [view, setView] = useState('game'); // 'game' or 'leads'
+            const [storage, setStorage] = useState(() => getSaved('sf_storage', { H: 10000000000, He: 0, Li: 0, C: 0, Fe: 0, Au: 0, Pt: 0, Os: 0 }));
             const [money, setMoney] = useState(() => Number(localStorage.getItem('sf_money')) || 0);
-            const [upgrades, setUpgrades] = useState(() => getInitialValue('sf_upgrades', { laserTier: 1, magnetTier: 1 }));
+            const [upgrades, setUpgrades] = useState(() => getSaved('sf_upgrades', { laserTier: 1, magnetTier: 1 }));
+            const [stats, setStats] = useState(() => getSaved('sf_stats', { maxMoney: 0, totalNft: 0 }));
 
             const [pSlider, setPSlider] = useState(0);
             const [tSlider, setTSlider] = useState(20);
             const [activeRecipe, setActiveRecipe] = useState(null);
 
-            // Сохранение при каждом изменении данных
             useEffect(() => {
                 localStorage.setItem('sf_storage', JSON.stringify(storage));
                 localStorage.setItem('sf_money', money.toString());
                 localStorage.setItem('sf_upgrades', JSON.stringify(upgrades));
+                
+                // Обновляем рекорды
+                const newStats = {
+                    maxMoney: Math.max(stats.maxMoney, money),
+                    totalNft: storage.Au + storage.Pt + storage.Os
+                };
+                setStats(newStats);
+                localStorage.setItem('sf_stats', JSON.stringify(newStats));
             }, [storage, money, upgrades]);
 
-            // --- ФИЗИКА И СИНТЕЗ ---
             const currentMaxP = 5000 * Math.pow(100, upgrades.magnetTier - 1);
             const currentMaxT = 1000 * Math.pow(10, upgrades.laserTier - 1);
             const curP = Math.floor((pSlider / 100) * currentMaxP);
             const curT = Math.floor(tSlider);
-
-            const nextMagnetCost = 15000 * Math.pow(20, upgrades.magnetTier - 1);
-            const nextLaserCost = 10000 * Math.pow(15, upgrades.laserTier - 1);
 
             useEffect(() => {
                 const timer = setInterval(() => {
@@ -88,7 +90,7 @@
                         for (let i = RECIPES.length - 1; i >= 0; i--) {
                             const r = RECIPES[i];
                             if (curT >= r.t && curP >= r.p) {
-                                const batch = 50000; 
+                                const batch = 25000; 
                                 let canCraft = true;
                                 Object.entries(r.in).forEach(([el, amt]) => {
                                     if (next[el] < amt * batch) canCraft = false;
@@ -104,13 +106,12 @@
                         setActiveRecipe(found);
                         return found ? next : prev;
                     });
-                }, 150);
+                }, 200);
                 return () => clearInterval(timer);
             }, [curT, curP]);
 
             const sell = (el) => {
                 const amt = storage[el];
-                if (amt <= 0) return;
                 setMoney(m => m + (amt * ELEMENTS[el].p));
                 setStorage(s => ({ ...s, [el]: 0 }));
             };
@@ -119,73 +120,110 @@
 
             return (
                 <div className="p-4 max-w-md mx-auto pb-44">
-                    <div className="glass p-5 rounded-3xl flex justify-between items-center mb-6 border-b-4 border-cyan-500">
-                        <div>
-                            <div className="text-[10px] font-ui text-cyan-400 mb-1 uppercase tracking-widest">Balance</div>
-                            <div className="text-2xl font-ui font-black">{formatNum(money)} $</div>
-                        </div>
-                        <div className="text-[10px] font-ui text-right opacity-40">AUTO-SAVE<br/>ACTIVE</div>
+                    {/* TABS */}
+                    <div className="flex justify-around mb-6 font-ui text-xs tracking-widest opacity-80">
+                        <button onClick={() => setView('game')} className={`pb-2 px-4 ${view === 'game' ? 'tab-active' : ''}`}>REACTOR</button>
+                        <button onClick={() => setView('leads')} className={`pb-2 px-4 ${view === 'leads' ? 'tab-active' : ''}`}>RECORDS</button>
                     </div>
 
-                    <div className="flex justify-center mb-8">
-                        <div className="reactor-shell flex items-center justify-center">
-                            <div className="plasma-core" style={{
-                                background: activeRecipe ? ELEMENTS[activeRecipe].color : '#38bdf8',
-                                opacity: activeRecipe ? 0.7 : 0.1,
-                                transform: `scale(${0.2 + (pSlider / 100) * 0.8})`,
-                                boxShadow: `0 0 ${curT/20}px ${curT/40}px ${activeRecipe ? ELEMENTS[activeRecipe].color : '#38bdf8'}`
-                            }} />
-                            <div className="z-10 text-center pointer-events-none">
-                                <div className="font-ui text-[10px] opacity-40 uppercase">Pressure</div>
-                                <div className="text-3xl font-ui font-black">{formatNum(curP)}</div>
+                    {view === 'game' ? (
+                        <div className="space-y-6 animate-in fade-in duration-500">
+                            <div className="glass p-5 rounded-3xl flex justify-between items-center border-b-2 border-cyan-500">
+                                <div>
+                                    <div className="text-[10px] font-ui text-cyan-400 mb-1 uppercase tracking-widest">Balance</div>
+                                    <div className="text-2xl font-ui font-black">{formatNum(money)} $</div>
+                                </div>
+                                <div className="text-[10px] font-ui text-right opacity-30 uppercase">System<br/>Online</div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div className="glass p-6 rounded-[2.5rem] space-y-8 mb-6">
-                        <div className="space-y-4">
-                            <div className="flex justify-between font-ui text-[10px]">
-                                <span>TIER {upgrades.magnetTier} MAGNETS</span>
-                                <span>{pSlider}%</span>
-                            </div>
-                            <input type="range" min="0" max="100" value={pSlider} onChange={e => setPSlider(Number(e.target.value))} />
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex justify-between font-ui text-[10px]">
-                                <span>TIER {upgrades.laserTier} THERMAL</span>
-                                <span>{curT}T</span>
-                            </div>
-                            <input type="range" min="20" max={currentMaxT} value={tSlider} onChange={e => setTSlider(Number(e.target.value))} />
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        {Object.entries(storage).map(([el, amt]) => (
-                            <div key={el} className={`glass p-3 rounded-2xl flex items-center justify-between ${activeRecipe === el ? 'bg-white/5 border-white' : 'opacity-60'}`}>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg flex items-center justify-center font-ui font-black text-black text-xs" style={{backgroundColor: ELEMENTS[el].color}}>{el}</div>
-                                    <div>
-                                        <div className="font-ui text-sm font-bold">{formatNum(amt)}</div>
-                                        <div className="text-[8px] opacity-50 uppercase">{ELEMENTS[el].n}</div>
+                            <div className="flex justify-center">
+                                <div className="reactor-shell flex items-center justify-center">
+                                    <div className="plasma-core" style={{
+                                        background: activeRecipe ? ELEMENTS[activeRecipe].color : '#38bdf8',
+                                        opacity: activeRecipe ? 0.7 : 0.1,
+                                        transform: `scale(${0.3 + (pSlider / 100) * 0.7})`,
+                                        boxShadow: `0 0 ${curT/25}px ${curT/50}px ${activeRecipe ? ELEMENTS[activeRecipe].color : '#38bdf8'}`
+                                    }} />
+                                    <div className="z-10 text-center pointer-events-none">
+                                        <div className="font-ui text-[10px] opacity-40 uppercase">Pressure</div>
+                                        <div className="text-2xl font-ui font-black">{formatNum(curP)}</div>
                                     </div>
                                 </div>
-                                {ELEMENTS[el].p > 0 && (
-                                    <button onClick={() => sell(el)} className="bg-white text-black font-ui font-black px-4 py-1 rounded-lg text-[10px]">SELL</button>
-                                )}
                             </div>
-                        ))}
-                    </div>
 
-                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-black/95 backdrop-blur-xl border-t border-white/10 flex gap-3 z-50">
-                        <button onClick={() => { if(money>=nextMagnetCost){ setMoney(m=>m-nextMagnetCost); setUpgrades(u=>({...u, magnetTier: u.magnetTier+1})) }}} 
-                                className="flex-1 py-4 rounded-2xl bg-cyan-600/10 border border-cyan-500/50 text-[10px] font-ui">
-                            MAG T{upgrades.magnetTier+1}<br/>{formatNum(nextMagnetCost)}$
-                        </button>
-                        <button onClick={() => { if(money>=nextLaserCost){ setMoney(m=>m-nextLaserCost); setUpgrades(u=>({...u, laserTier: u.laserTier+1})) }}} 
-                                className="flex-1 py-4 rounded-2xl bg-red-600/10 border border-red-500/50 text-[10px] font-ui">
-                            LASER T{upgrades.laserTier+1}<br/>{formatNum(nextLaserCost)}$
-                        </button>
-                    </div>
+                            <div className="glass p-6 rounded-[2rem] space-y-6">
+                                <div className="space-y-3">
+                                    <div className="flex justify-between font-ui text-[9px] opacity-60"><span>MAGNETIC FIELD (P)</span><span>{pSlider}%</span></div>
+                                    <input type="range" min="0" max="100" value={pSlider} onChange={e => setPSlider(Number(e.target.value))} />
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between font-ui text-[9px] opacity-60"><span>THERMAL LOAD (T)</span><span>{curT} / {formatNum(currentMaxT)}</span></div>
+                                    <input type="range" min="20" max={currentMaxT} value={tSlider} onChange={e => setTSlider(Number(e.target.value))} />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                {Object.entries(storage).map(([el, amt]) => (
+                                    <div key={el} className={`glass p-3 rounded-2xl flex items-center justify-between transition-opacity ${amt > 0 ? 'opacity-100' : 'opacity-40'}`}>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-ui font-black text-black text-xs" style={{backgroundColor: ELEMENTS[el].color}}>{el}</div>
+                                            <div>
+                                                <div className="font-ui text-sm font-bold">{formatNum(amt)}</div>
+                                                <div className="text-[8px] opacity-50 uppercase">{ELEMENTS[el].n}</div>
+                                            </div>
+                                        </div>
+                                        {ELEMENTS[el].p > 0 && amt > 0 && (
+                                            <button onClick={() => sell(el)} className="bg-white text-black font-ui font-black px-4 py-1 rounded-lg text-[9px]">SELL</button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="animate-in slide-in-from-right duration-300 space-y-4">
+                            <h2 className="font-ui text-xl font-black mb-6 text-center text-cyan-400">PERSONAL HALL OF FAME</h2>
+                            
+                            <div className="glass p-6 rounded-3xl border-l-4 border-yellow-500">
+                                <div className="text-[10px] font-ui opacity-50 mb-1">ALL-TIME PEAK BALANCE</div>
+                                <div className="text-3xl font-ui font-black text-yellow-500">{formatNum(stats.maxMoney)} $</div>
+                            </div>
+
+                            <div className="glass p-6 rounded-3xl border-l-4 border-purple-500">
+                                <div className="text-[10px] font-ui opacity-50 mb-1">TOTAL NFT ELEMENTS PRODUCED</div>
+                                <div className="text-3xl font-ui font-black text-purple-500">{formatNum(stats.totalNft)}</div>
+                            </div>
+
+                            <div className="mt-8">
+                                <div className="text-[10px] font-ui opacity-40 mb-3 uppercase tracking-widest text-center">Global Ranking (Coming Soon)</div>
+                                <div className="space-y-2 opacity-50">
+                                    {[1,2,3].map(i => (
+                                        <div key={i} className="glass p-3 rounded-xl flex justify-between items-center grayscale">
+                                            <span className="font-ui text-xs">#{i+1} PLAYER_0x{Math.floor(Math.random()*1000)}</span>
+                                            <span className="font-ui text-xs">--- $</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* UPGRADES SHOP (Visible only in game view) */}
+                    {view === 'game' && (
+                        <div className="fixed bottom-0 left-0 right-0 p-4 bg-black/95 border-t border-white/10 flex gap-3 z-50">
+                            <button onClick={() => { 
+                                const cost = 15000 * Math.pow(20, upgrades.magnetTier - 1);
+                                if(money>=cost){ setMoney(m=>m-cost); setUpgrades(u=>({...u, magnetTier: u.magnetTier+1})) }
+                            }} className="flex-1 py-4 rounded-2xl bg-cyan-600/10 border border-cyan-500/50 text-[10px] font-ui">
+                                MAGNET T{upgrades.magnetTier+1}<br/>UPGRADE
+                            </button>
+                            <button onClick={() => { 
+                                const cost = 10000 * Math.pow(15, upgrades.laserTier - 1);
+                                if(money>=cost){ setMoney(m=>m-cost); setUpgrades(u=>({...u, laserTier: u.laserTier+1})) }
+                            }} className="flex-1 py-4 rounded-2xl bg-red-600/10 border border-red-500/50 text-[10px] font-ui">
+                                LASER T{upgrades.laserTier+1}<br/>UPGRADE
+                            </button>
+                        </div>
+                    )}
                 </div>
             );
         }
